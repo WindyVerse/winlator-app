@@ -2,8 +2,6 @@ package com.winlator.xserver;
 
 import com.winlator.core.Bitmask;
 import com.winlator.renderer.FullscreenTransformation;
-import com.winlator.winhandler.MouseEventFlags;
-import com.winlator.winhandler.WinHandler;
 import com.winlator.xserver.events.ButtonPress;
 import com.winlator.xserver.events.ButtonRelease;
 import com.winlator.xserver.events.EnterNotify;
@@ -16,7 +14,6 @@ import com.winlator.xserver.events.MotionNotify;
 import com.winlator.xserver.events.PointerWindowEvent;
 
 public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyboard.OnKeyboardListener, WindowManager.OnWindowModificationListener, XResourceManager.OnResourceLifecycleListener {
-    private static final byte MOUSE_WHEEL_DELTA = 120;
     private Window pointWindow;
     private final XServer xServer;
 
@@ -144,72 +141,59 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
 
     @Override
     public void onPointerButtonPress(Pointer.Button button) {
-        if (xServer.isRelativeMouseMovement()) {
-            WinHandler winHandler = xServer.getWinHandler();
-            int wheelDelta = button == Pointer.Button.BUTTON_SCROLL_UP ? MOUSE_WHEEL_DELTA : (button == Pointer.Button.BUTTON_SCROLL_DOWN ? -MOUSE_WHEEL_DELTA : 0);
-            winHandler.mouseEvent(MouseEventFlags.getFlagFor(button, true), 0, 0, wheelDelta);
+        Window grabWindow = xServer.grabManager.getWindow();
+        if (grabWindow == null) {
+            grabWindow = pointWindow.getAncestorWithEventId(Event.BUTTON_PRESS);
+            if (grabWindow != null) xServer.grabManager.activatePointerGrab(grabWindow);
         }
-        else {
-            Window grabWindow = xServer.grabManager.getWindow();
-            if (grabWindow == null) {
-                grabWindow = pointWindow.getAncestorWithEventId(Event.BUTTON_PRESS);
-                if (grabWindow != null) xServer.grabManager.activatePointerGrab(grabWindow);
+
+        if (grabWindow != null && grabWindow.attributes.isEnabled()) {
+            Bitmask eventMask = createPointerEventMask();
+            eventMask.unset(button.flag());
+
+            short x = xServer.pointer.getX();
+            short y = xServer.pointer.getY();
+
+            FullscreenTransformation fullscreenTransformation = grabWindow.getFullscreenTransformation();
+            if (fullscreenTransformation != null) {
+                short[] transformedPoint = fullscreenTransformation.transformPointerCoords(x, y);
+                x = transformedPoint[0];
+                y = transformedPoint[1];
             }
 
-            if (grabWindow != null && grabWindow.attributes.isEnabled()) {
-                Bitmask eventMask = createPointerEventMask();
-                eventMask.unset(button.flag());
-
-                short x = xServer.pointer.getX();
-                short y = xServer.pointer.getY();
-
-                FullscreenTransformation fullscreenTransformation = grabWindow.getFullscreenTransformation();
-                if (fullscreenTransformation != null) {
-                    short[] transformedPoint = fullscreenTransformation.transformPointerCoords(x, y);
-                    x = transformedPoint[0];
-                    y = transformedPoint[1];
-                }
-
-                short[] localPoint = grabWindow.rootPointToLocal(x, y);
-                Window child = grabWindow.isAncestorOf(pointWindow) ? pointWindow : null;
-                grabWindow.sendEvent(Event.BUTTON_PRESS, new ButtonPress(button.code(), xServer.windowManager.rootWindow, grabWindow, child, x, y, localPoint[0], localPoint[1], eventMask));
-            }
+            short[] localPoint = grabWindow.rootPointToLocal(x, y);
+            Window child = grabWindow.isAncestorOf(pointWindow) ? pointWindow : null;
+            grabWindow.sendEvent(Event.BUTTON_PRESS, new ButtonPress(button.code(), xServer.windowManager.rootWindow, grabWindow, child, x, y, localPoint[0], localPoint[1], eventMask));
         }
     }
 
     @Override
     public void onPointerButtonRelease(Pointer.Button button) {
-        if (xServer.isRelativeMouseMovement()) {
-            WinHandler winHandler = xServer.getWinHandler();
-            winHandler.mouseEvent(MouseEventFlags.getFlagFor(button, false), 0, 0, 0);
+        Bitmask eventMask = createPointerEventMask();
+        Window grabWindow = xServer.grabManager.getWindow();
+        Window window = grabWindow == null || xServer.grabManager.isOwnerEvents() ? pointWindow.getAncestorWithEventMask(eventMask) : null;
+
+        if (grabWindow != null || window != null) {
+            Window eventWindow = window != null ? window : grabWindow;
+
+            short x = xServer.pointer.getX();
+            short y = xServer.pointer.getY();
+
+            FullscreenTransformation fullscreenTransformation = eventWindow.getFullscreenTransformation();
+            if (fullscreenTransformation != null) {
+                short[] transformedPoint = fullscreenTransformation.transformPointerCoords(x, y);
+                x = transformedPoint[0];
+                y = transformedPoint[1];
+            }
+
+            short[] localPoint = eventWindow.rootPointToLocal(x, y);
+            Window child = eventWindow.isAncestorOf(pointWindow) ? pointWindow : null;
+            ButtonRelease buttonRelease = new ButtonRelease(button.code(), xServer.windowManager.rootWindow, eventWindow, child, x, y, localPoint[0], localPoint[1], eventMask);
+            sendEvent(window, eventMask, buttonRelease);
         }
-        else {
-            Bitmask eventMask = createPointerEventMask();
-            Window grabWindow = xServer.grabManager.getWindow();
-            Window window = grabWindow == null || xServer.grabManager.isOwnerEvents() ? pointWindow.getAncestorWithEventMask(eventMask) : null;
 
-            if (grabWindow != null || window != null) {
-                Window eventWindow = window != null ? window : grabWindow;
-
-                short x = xServer.pointer.getX();
-                short y = xServer.pointer.getY();
-
-                FullscreenTransformation fullscreenTransformation = eventWindow.getFullscreenTransformation();
-                if (fullscreenTransformation != null) {
-                    short[] transformedPoint = fullscreenTransformation.transformPointerCoords(x, y);
-                    x = transformedPoint[0];
-                    y = transformedPoint[1];
-                }
-
-                short[] localPoint = eventWindow.rootPointToLocal(x, y);
-                Window child = eventWindow.isAncestorOf(pointWindow) ? pointWindow : null;
-                ButtonRelease buttonRelease = new ButtonRelease(button.code(), xServer.windowManager.rootWindow, eventWindow, child, x, y, localPoint[0], localPoint[1], eventMask);
-                sendEvent(window, eventMask, buttonRelease);
-            }
-
-            if (xServer.pointer.getButtonMask().isEmpty() && xServer.grabManager.isReleaseWithButtons()) {
-                xServer.grabManager.deactivatePointerGrab();
-            }
+        if (xServer.pointer.getButtonMask().isEmpty() && xServer.grabManager.isReleaseWithButtons()) {
+            xServer.grabManager.deactivatePointerGrab();
         }
     }
 

@@ -17,17 +17,6 @@ public abstract class GrabRequests {
     private enum Status {SUCCESS, ALREADY_GRABBED, INVALID_TIME, NOT_VIEWABLE, FROZEN}
 
     public static void grabPointer(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
-        if (client.xServer.isRelativeMouseMovement()) {
-            client.skipRequest();
-            try (XStreamLock lock = outputStream.lock()) {
-                outputStream.writeByte(RESPONSE_CODE_SUCCESS);
-                outputStream.writeByte((byte)Status.ALREADY_GRABBED.ordinal());
-                outputStream.writeShort(client.getSequenceNumber());
-                outputStream.writeInt(0);
-                outputStream.writePad(24);
-            }
-            return;
-        }
 
         boolean ownerEvents = client.getRequestData() == 1;
         int windowId = inputStream.readInt();

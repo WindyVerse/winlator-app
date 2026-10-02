@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import androidx.core.app.NotificationCompat;
 import com.winlator.R;
-import com.winlator.MainActivity;
 import java.lang.ref.WeakReference;
 
 public class NotificationUtils {
@@ -59,7 +58,7 @@ public class NotificationUtils {
      * Sends or updates a notification with all parameters.
      */
     public void notify(int id, String content, String title, Class<?> serviceClass, String exitAction) {
-        Notification notification = createForegroundNotification(content, title, serviceClass, exitAction, MainActivity.class);
+        Notification notification = createForegroundNotification(content, title, serviceClass, exitAction, null);
         notificationManager.notify(id, notification);
     }
 
@@ -81,7 +80,9 @@ public class NotificationUtils {
      * Creates a foreground notification.
      */
     public Notification createForegroundNotification(String content, String title, Class<?> serviceClass, String exitAction, Class<?> targetActivity) {
-        Intent intent = new Intent(context, targetActivity);
+        Intent intent = targetActivity != null ? new Intent(context, targetActivity) :
+            context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+        if (intent == null) intent = new Intent();
         intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         PendingIntent pendingIntent = PendingIntent.getActivity(
@@ -115,14 +116,14 @@ public class NotificationUtils {
      * Overload of createForegroundNotification() with default target activity.
      */
     public Notification createForegroundNotification(String content, String title, Class<?> serviceClass, String exitAction) {
-        return createForegroundNotification(content, title, serviceClass, exitAction, MainActivity.class);
+        return createForegroundNotification(content, title, serviceClass, exitAction, null);
     }
 
     /**
      * Overload of createForegroundNotification() with default title and target activity.
      */
     public Notification createForegroundNotification(String content, String title) {
-        return createForegroundNotification(content, title, null, null, MainActivity.class);
+        return createForegroundNotification(content, title, null, null, null);
     }
 
     /**

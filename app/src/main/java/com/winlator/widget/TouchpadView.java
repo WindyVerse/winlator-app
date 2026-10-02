@@ -14,8 +14,6 @@ import com.winlator.core.AppUtils;
 import com.winlator.math.Mathf;
 import com.winlator.math.XForm;
 import com.winlator.renderer.ViewTransformation;
-import com.winlator.winhandler.MouseEventFlags;
-import com.winlator.winhandler.WinHandler;
 import com.winlator.xserver.Pointer;
 import com.winlator.xserver.XServer;
 
@@ -255,11 +253,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
                 int dx = finger1.deltaX();
                 int dy = finger1.deltaY();
 
-                WinHandler winHandler = xServer.getWinHandler();
-                if (xServer.isRelativeMouseMovement()) {
-                    winHandler.mouseEvent(MouseEventFlags.MOVE, dx, dy, 0);
-                }
-                else xServer.injectPointerMoveDelta(dx, dy);
+                xServer.injectPointerMoveDelta(dx, dy);
             }
         }
     }

@@ -1,12 +1,12 @@
 package com.winlator.xserver;
 
+import android.view.InputDevice;
 import android.view.KeyEvent;
 
 import androidx.collection.ArraySet;
 
 import com.winlator.core.AppUtils;
 import com.winlator.core.Bitmask;
-import com.winlator.inputcontrols.ExternalController;
 
 import java.util.ArrayList;
 
@@ -96,7 +96,7 @@ public class Keyboard {
     }
 
     public boolean onKeyEvent(KeyEvent event) {
-        if (ExternalController.isGameController(event.getDevice())) return false;
+        if (isGameController(event.getDevice())) return false;
 
         int action = event.getAction();
         if (action == KeyEvent.ACTION_DOWN || action == KeyEvent.ACTION_UP) {
@@ -382,5 +382,18 @@ public class Keyboard {
 
     public static boolean isModifierSticky(byte keycode) {
         return keycode == XKeycode.KEY_CAPS_LOCK.id || keycode == XKeycode.KEY_NUM_LOCK.id;
+    }
+
+    /** Gamepads are handled by the game, not as an X keyboard. Fingerprint sensors register as uinput devices. */
+    private static boolean isGameController(InputDevice device) {
+        if (device == null || device.isVirtual()) return false;
+        String name = device.getName();
+        if (name != null) {
+            String lowerName = name.toLowerCase();
+            if (lowerName.contains("uinput-fpc") || lowerName.contains("goodix_fp") || lowerName.contains("uinput-")) return false;
+        }
+        int sources = device.getSources();
+        return (sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+               (sources & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK;
     }
 }

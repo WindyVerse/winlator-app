@@ -2,14 +2,11 @@ package com.winlator.xserver;
 
 import android.content.Context;
 
-import com.winlator.core.CursorLocker;
 import com.winlator.core.ProcessHelper;
 import com.winlator.renderer.GLRenderer;
-import com.winlator.winhandler.WinHandler;
 import com.winlator.xserver.extensions.BigReqExtension;
 import com.winlator.xserver.extensions.DRI3Extension;
 import com.winlator.xserver.extensions.Extension;
-import com.winlator.xserver.extensions.GLXExtension;
 import com.winlator.xserver.extensions.GenericEventExtension;
 import com.winlator.xserver.extensions.MITSHMExtension;
 import com.winlator.xserver.extensions.PresentExtension;
@@ -23,7 +20,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class XServer {
     public enum Lockable {WINDOW_MANAGER, PIXMAP_MANAGER, DRAWABLE_MANAGER, GRAPHIC_CONTEXT_MANAGER, INPUT_DEVICE, CURSOR_MANAGER, SHMSEGMENT_MANAGER}
-    private static final boolean ENABLE_CURSOR_LOCKER = false;
     public static final short VERSION = 11;
     public static final String VENDOR_NAME = "Elbrus Technologies, LLC";
     public static final Charset LATIN1_CHARSET = Charset.forName("latin1");
@@ -41,17 +37,13 @@ public class XServer {
     public final Pointer pointer = new Pointer(this);
     public final InputDeviceManager inputDeviceManager;
     public final GrabManager grabManager;
-    public final CursorLocker cursorLocker;
     private SHMSegmentManager shmSegmentManager;
     private GLRenderer renderer;
-    private WinHandler winHandler;
     private final EnumMap<Lockable, ReentrantLock> locks = new EnumMap<>(Lockable.class);
-    private boolean relativeMouseMovement = false;
 
     public XServer(Context context, ScreenInfo screenInfo) {
         this.context = context;
         this.screenInfo = screenInfo;
-        cursorLocker = ENABLE_CURSOR_LOCKER ? new CursorLocker(this) : null;
         for (Lockable lockable : Lockable.values()) locks.put(lockable, new ReentrantLock());
 
         pixmapManager = new PixmapManager();
@@ -66,29 +58,12 @@ public class XServer {
         extensions = setupExtensions();
     }
 
-    public boolean isRelativeMouseMovement() {
-        return relativeMouseMovement;
-    }
-
-    public void setRelativeMouseMovement(boolean relativeMouseMovement) {
-        if (cursorLocker != null) cursorLocker.setEnabled(!relativeMouseMovement);
-        this.relativeMouseMovement = relativeMouseMovement;
-    }
-
     public GLRenderer getRenderer() {
         return renderer;
     }
 
     public void setRenderer(GLRenderer renderer) {
         this.renderer = renderer;
-    }
-
-    public WinHandler getWinHandler() {
-        return winHandler;
-    }
-
-    public void setWinHandler(WinHandler winHandler) {
-        this.winHandler = winHandler;
     }
 
     public SHMSegmentManager getSHMSegmentManager() {
@@ -155,7 +130,7 @@ public class XServer {
     public void injectPointerMoveDelta(int dx, int dy) {
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             pointer.setPosition(pointer.getX() + dx, pointer.getY() + dy);
-            if (cursorLocker == null) pointer.clampPosition();
+            pointer.clampPosition();
 
             XInputExtension xInputExtension = getExtension(XInputExtension.class);
             if (xInputExtension != null) xInputExtension.sendRawMotion(dx, dy);
@@ -205,7 +180,6 @@ public class XServer {
             new PresentExtension(this, opcode--),
             new SyncExtension(this, opcode--),
             new XComposite(this, opcode--),
-            new GLXExtension(this, opcode--),
             new GenericEventExtension(this, opcode--),
             new XInputExtension(this, opcode--)
         };

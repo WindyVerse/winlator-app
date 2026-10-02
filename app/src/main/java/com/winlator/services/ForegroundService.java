@@ -2,6 +2,7 @@ package com.winlator.services;
 
 import android.app.KeyguardManager;
 import android.app.Service;
+import android.app.Activity;
 import android.app.Notification;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -21,9 +22,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
 
-import com.winlator.MainActivity;
 import com.winlator.R;
-import com.winlator.XServerDisplayActivity;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +52,8 @@ public class ForegroundService extends Service {
     private Handler screenReceiverHandler;
 
     private static volatile SharedPreferences prefs;
+    // The Activity hosting the X server; the notification returns to it.
+    private static volatile Class<?> sessionActivity;
     private static final String PREF_USE_WAKELOCK = "enable_background_wakelock";
 
     private NotificationUtils notificationUtils;
@@ -74,6 +75,7 @@ public class ForegroundService extends Service {
             return;
         }
 
+        if (ctx instanceof Activity) sessionActivity = ctx.getClass();
         sessionActive.set(true);
         isSessionInBackground = false;
         Log.d(TAG, "startSession");
@@ -274,15 +276,15 @@ public class ForegroundService extends Service {
     private void ensureForeground() {
         boolean containerActive = sessionActive.get();
 
-        // Determine target activity: Game screen if active, else Main menu
-        Class<?> targetActivity = containerActive ? XServerDisplayActivity.class : MainActivity.class;
+        // Return to the game while a session runs; otherwise open the app.
+        Class<?> targetActivity = containerActive ? sessionActivity : null;
 
         Notification n = notificationUtils.createForegroundNotification(
                 getNotificationContent(),
-                "Winlator",
-                XServerDisplayActivity.class, // Service class for the 'Exit' action
-                null, // Exit action here, not used because might cause issues
-                targetActivity // Activity class for the 'Open' (notification tap) action
+                getApplicationInfo().loadLabel(getPackageManager()).toString(),
+                null,
+                null,
+                targetActivity
         );
 
         // Generate a custom notification ID if it wasn't set

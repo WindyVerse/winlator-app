@@ -1,33 +1,22 @@
-apply plugin: 'com.android.application'
+apply plugin: 'com.android.library'
 
+// The Winlator X server, its renderer, PulseAudio server and SysV shared memory, embedded
+// by a host app (WindyVerse PC Gamer). The host declares the Activity and services.
 android {
     namespace 'com.winlator'
-    compileSdk 35
+    compileSdk 36
+    ndkVersion '28.2.13676358'
 
     defaultConfig {
-        applicationId 'com.winlator'
-        minSdkVersion 26
-        targetSdkVersion 28
-        versionCode 33
-        versionName "11.2"
+        minSdk 26
+        ndk { abiFilters 'arm64-v8a' }
+        externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON' } }
     }
 
-    buildTypes {
-        debug {
-            minifyEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-
-            ndk {
-                abiFilters 'arm64-v8a'
-            }
-        }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
-
-    lintOptions {
-        checkReleaseBuilds false
-    }
-
-    ndkVersion '24.0.8215888'
 
     externalNativeBuild {
         cmake {
@@ -38,11 +27,10 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.4.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.preference:preference:1.2.1'
-    implementation 'com.google.android.material:material:1.4.0'
-    implementation 'com.github.luben:zstd-jni:1.5.2-3@aar'
-    implementation 'org.tukaani:xz:1.7'
-    implementation 'org.apache.commons:commons-compress:1.20'
-    implementation 'androidx.lifecycle:lifecycle-process:2.5.1'
+    implementation 'com.github.luben:zstd-jni:1.5.7-6@aar'
+    implementation 'org.tukaani:xz:1.10'
+    implementation 'org.apache.commons:commons-compress:1.27.1'
+    implementation 'androidx.lifecycle:lifecycle-process:2.9.4'
 }

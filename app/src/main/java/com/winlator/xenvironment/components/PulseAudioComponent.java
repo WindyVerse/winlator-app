@@ -3,7 +3,6 @@ package com.winlator.xenvironment.components;
 import android.content.Context;
 import android.os.Process;
 
-import com.winlator.contentdialog.AudioDriverConfigDialog;
 import com.winlator.core.EnvVars;
 import com.winlator.core.FileUtils;
 import com.winlator.core.ProcessHelper;
@@ -15,8 +14,8 @@ import java.io.File;
 public class PulseAudioComponent extends EnvironmentComponent {
     private final UnixSocketConfig socketConfig;
     private static int pid = -1;
-    private float volume = AudioDriverConfigDialog.DEFAULT_VOLUME;
-    private byte performanceMode = AudioDriverConfigDialog.DEFAULT_PERFORMANCE_MODE;
+    private float volume = 1.0f;
+    private byte performanceMode = 1;
     private static final Object lock = new Object();
 
     public PulseAudioComponent(UnixSocketConfig socketConfig) {
