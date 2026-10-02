@@ -193,6 +193,16 @@ public class WineRegistryEditor implements Closeable {
         setHexValue(key, name, data.toString());
     }
 
+    public void setMultiStringValue(String key, String name, java.util.List<String> values) {
+        StringBuilder text = new StringBuilder();
+        for (String value : values) text.append(value).append((char)0);
+        text.append((char)0);
+        byte[] bytes = text.toString().getBytes(java.nio.charset.StandardCharsets.UTF_16LE);
+        java.util.StringJoiner hex = new java.util.StringJoiner(",");
+        for (byte value : bytes) hex.add(String.format(java.util.Locale.ROOT, "%02x", value & 255));
+        setRawValue(key, name, "hex(7):" + hex);
+    }
+
     public byte[] getHexValues(String key, String name) {
         String value = getRawValue(key, name);
         if (value != null && (value.startsWith("hex:") || value.startsWith("hex("))) {

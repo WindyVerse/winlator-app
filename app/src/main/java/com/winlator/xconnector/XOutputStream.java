@@ -1,5 +1,11 @@
 package com.winlator.xconnector;
 
+import android.os.ParcelFileDescriptor;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.OsConstants;
+
+import com.winlator.core.ProcessHelper;
 import com.winlator.xserver.XServer;
 
 import java.io.IOException;
@@ -10,18 +16,32 @@ import dalvik.annotation.optimization.CriticalNative;
 
 public class XOutputStream implements XStreamLock {
     private final ReentrantLock lock = new ReentrantLock();
-    private final long nativePtr;
+    private long nativePtr;
+    private final int initialCapacity;
+    private final ParcelFileDescriptor socket;
+    private final int socketFd;
+    private ParcelFileDescriptor ancillary;
+    private final OrderedOutput writer;
 
     static {
         System.loadLibrary("winlator");
     }
 
     public XOutputStream(int clientFd, int initialCapacity) {
-        nativePtr = nativeAllocate(clientFd, initialCapacity);
+        this.initialCapacity = initialCapacity;
+        try { socket = ParcelFileDescriptor.fromFd(clientFd); }
+        catch (IOException error) { throw new IllegalStateException("Cannot duplicate game socket", error); }
+        socketFd = socket.getFd();
+        nativePtr = nativeAllocate(socketFd, initialCapacity);
+        writer = new OrderedOutput(16 * 1024 * 1024, 1024, this::interruptSocket,
+            () -> closeFd(socket), error -> ProcessHelper.emitDebugMessage("[X11 transport] " + error.getMessage()));
     }
 
-    public void setAncillaryFd(int ancillaryFd) {
-        setAncillaryFd(nativePtr, ancillaryFd);
+    public void setAncillaryFd(int ancillaryFd) throws IOException {
+        ParcelFileDescriptor replacement = ancillaryFd >= 0 ? ParcelFileDescriptor.fromFd(ancillaryFd) : null;
+        closeFd(ancillary);
+        ancillary = replacement;
+        setAncillaryFd(nativePtr, replacement == null ? 0 : replacement.getFd());
     }
 
     public void writeByte(byte value) {
@@ -52,7 +72,7 @@ public class XOutputStream implements XStreamLock {
     }
 
     public void write(byte[] data, int offset, int length) {
-        for (int i = offset; i < length; i++) writeByte(nativePtr, data[i]);
+        for (int i = offset, end = offset + length; i < end; i++) writeByte(nativePtr, data[i]);
     }
 
     public void writeShortAt(int position, short value) {
@@ -82,7 +102,7 @@ public class XOutputStream implements XStreamLock {
             writeByteBuffer(nativePtr, data, data.position(), data.remaining());
         }
         else {
-            for (int i = data.position(), length = data.remaining(); i < length; i++) {
+            for (int i = data.position(), end = data.limit(); i < end; i++) {
                 writeByte(nativePtr, data.get(i));
             }
         }
@@ -102,22 +122,67 @@ public class XOutputStream implements XStreamLock {
         writeInt(frac);
     }
 
-    public XStreamLock lock() {
+    public XStreamLock lock() throws IOException {
         lock.lock();
+        if (nativePtr == 0 || writer.isClosed()) {
+            lock.unlock();
+            throw new IOException("Game connection is closed");
+        }
         return this;
     }
 
     public void destroy() {
-        destroy(nativePtr);
+        writer.close();
+        lock.lock();
+        try {
+            destroy(nativePtr);
+            nativePtr = 0;
+            closeFd(ancillary);
+            ancillary = null;
+        } finally { lock.unlock(); }
     }
 
     @Override
     public void close() throws IOException {
         try {
-            if (!sendData(nativePtr)) throw new IOException("Failed to send data.");
+            int size = length(nativePtr);
+            if (size == 0) return;
+            // Detach under the original protocol lock, so replies, pointer and
+            // key events share one FIFO. Only the writer touches this packet.
+            NativePacket packet = new NativePacket(nativePtr, Math.max(size, initialCapacity), ancillary);
+            nativePtr = nativeAllocate(socketFd, initialCapacity);
+            ancillary = null;
+            writer.submit(packet);
+        } finally { lock.unlock(); }
+    }
+
+    private static void closeFd(ParcelFileDescriptor fd) {
+        if (fd != null) {
+            try { fd.close(); } catch (IOException ignored) {}
         }
-        finally {
-            lock.unlock();
+    }
+
+    private void interruptSocket() {
+        try { Os.shutdown(socket.getFileDescriptor(), OsConstants.SHUT_RDWR); }
+        catch (ErrnoException ignored) {} // An already closed peer needs no wakeup.
+    }
+
+    private static final class NativePacket implements OrderedOutput.Packet {
+        private final long pointer;
+        private final int bytes;
+        private final ParcelFileDescriptor ancillary;
+        NativePacket(long pointer, int bytes, ParcelFileDescriptor ancillary) {
+            this.pointer = pointer;
+            this.bytes = bytes;
+            this.ancillary = ancillary;
+        }
+        public int bytes() { return bytes; }
+        public void send() throws IOException {
+            if (!sendData(pointer)) throw new IOException("Failed to send game connection data");
+        }
+        public void dispose() {
+            destroy(pointer);
+            closeFd(ancillary);
         }
     }
 

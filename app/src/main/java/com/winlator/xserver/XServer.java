@@ -1,8 +1,9 @@
 package com.winlator.xserver;
 
-import com.winlator.XServerDisplayActivity;
-import com.winlator.contentdialog.DebugDialog;
+import android.content.Context;
+
 import com.winlator.core.CursorLocker;
+import com.winlator.core.ProcessHelper;
 import com.winlator.renderer.GLRenderer;
 import com.winlator.winhandler.WinHandler;
 import com.winlator.xserver.extensions.BigReqExtension;
@@ -26,7 +27,7 @@ public class XServer {
     public static final short VERSION = 11;
     public static final String VENDOR_NAME = "Elbrus Technologies, LLC";
     public static final Charset LATIN1_CHARSET = Charset.forName("latin1");
-    public final XServerDisplayActivity activity;
+    public final Context context;
     private final Extension[] extensions;
     public final ScreenInfo screenInfo;
     public final PixmapManager pixmapManager;
@@ -47,8 +48,8 @@ public class XServer {
     private final EnumMap<Lockable, ReentrantLock> locks = new EnumMap<>(Lockable.class);
     private boolean relativeMouseMovement = false;
 
-    public XServer(XServerDisplayActivity activity, ScreenInfo screenInfo) {
-        this.activity = activity;
+    public XServer(Context context, ScreenInfo screenInfo) {
+        this.context = context;
         this.screenInfo = screenInfo;
         cursorLocker = ENABLE_CURSOR_LOCKER ? new CursorLocker(this) : null;
         for (Lockable lockable : Lockable.values()) locks.put(lockable, new ReentrantLock());
@@ -239,7 +240,6 @@ public class XServer {
     }
 
     public void debugPrint(String line) {
-        DebugDialog debugDialog = activity.getDebugDialog();
-        if (debugDialog != null) debugDialog.call("xserver:"+line);
+        ProcessHelper.emitDebugMessage("xserver:"+line);
     }
 }

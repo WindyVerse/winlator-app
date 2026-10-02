@@ -1,6 +1,9 @@
 #ifndef WINLATOR_SOCKET_UTILS_H
 #define WINLATOR_SOCKET_UTILS_H
 
+#include <errno.h>
+#include <stdbool.h>
+#include <string.h>
 #include <sys/socket.h>
 
 #define MAX_FDS 32
@@ -101,6 +104,34 @@ static inline int sock_write(int fd, char* buffer, int size) {
     while (left);
 
     return size;
+}
+
+// Sends a whole packet on a stream socket, which may accept only part of it. The
+// descriptor travels with the first byte only; interrupted calls are retried and a
+// shutdown socket wakes a blocked writer.
+static inline bool send_packet(int sockFd, const void* data, size_t size, int fd) {
+    size_t offset = 0;
+    while (offset < size) {
+        struct iovec iov = {.iov_base = (char*)data + offset, .iov_len = size - offset};
+        union { struct cmsghdr align; char bytes[CMSG_SPACE(sizeof(int))]; } control;
+        struct msghdr msg = {.msg_iov = &iov, .msg_iovlen = 1};
+        if (fd > 0) {
+            memset(&control, 0, sizeof(control));
+            msg.msg_control = control.bytes;
+            msg.msg_controllen = sizeof(control.bytes);
+            struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+            cmsg->cmsg_level = SOL_SOCKET;
+            cmsg->cmsg_type = SCM_RIGHTS;
+            cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+            memcpy(CMSG_DATA(cmsg), &fd, sizeof(int));
+        }
+        ssize_t sent = sendmsg(sockFd, &msg, MSG_NOSIGNAL);
+        if (sent < 0 && errno == EINTR) continue;
+        if (sent <= 0) return false;
+        offset += (size_t)sent;
+        fd = 0;
+    }
+    return true;
 }
 
 #endif

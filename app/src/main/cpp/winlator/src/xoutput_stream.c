@@ -47,15 +47,11 @@ static jboolean XOutputStream_send(XOutputStream* outputStream) {
     outputStream->buffer.limit = outputStream->buffer.position;
     outputStream->buffer.position = 0;
 
-    int bytesSent;
-    if (outputStream->ancillaryFd > 0) {
-        bytesSent = send_fds(outputStream->fd, &outputStream->ancillaryFd, 1, outputStream->buffer.data, outputStream->buffer.limit);
-        outputStream->ancillaryFd = 0;
-    }
-    else bytesSent = write(outputStream->fd, outputStream->buffer.data, outputStream->buffer.limit);
-
+    bool sent = send_packet(outputStream->fd, outputStream->buffer.data,
+                            outputStream->buffer.limit, outputStream->ancillaryFd);
+    outputStream->ancillaryFd = 0;
     outputStream->buffer.limit = outputStream->buffer.capacity;
-    return bytesSent >= 0 ? JNI_TRUE : JNI_FALSE;
+    return sent ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jlong JNICALL

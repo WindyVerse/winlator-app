@@ -135,10 +135,6 @@ public abstract class DrawRequests {
             dstDrawable.setData(null);
             dstDrawable.setTexture(srcDrawable.getTexture());
 
-            if (srcDrawableId != client.xServer.activity.frameRatingWindowId) {
-                Window srcWindow =  client.xServer.windowManager.getWindow(srcDrawableId);
-                client.xServer.activity.changeFrameRatingVisibility(srcWindow, true);
-            }
             return;
         }
 
