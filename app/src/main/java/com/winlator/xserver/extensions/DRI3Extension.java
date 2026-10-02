@@ -39,6 +39,7 @@ public class DRI3Extension extends Extension {
         private static final byte OPEN = 1;
         private static final byte PIXMAP_FROM_BUFFER = 2;
         private static final byte BUFFER_FROM_PIXMAP = 3;
+        private static final byte FENCE_FROM_FD = 4;
         private static final byte PIXMAP_FROM_BUFFERS = 7;
     }
 
@@ -175,6 +176,22 @@ public class DRI3Extension extends Extension {
         }
     }
 
+    private void fenceFromFd(XClient client, XInputStream inputStream) throws IOException, XRequestError {
+        // Mesa registers one xshmfence per swapchain image as its PresentPixmap idle fence
+        // and waits on it before reusing the image.
+        int drawableId = inputStream.readInt();
+        int fenceId = inputStream.readInt();
+        boolean triggered = inputStream.readByte() == 1;
+        inputStream.skip(3);
+        ShmFence fence = ShmFence.map(inputStream.getAncillaryFd());
+        if (fence == null) throw new BadAlloc();
+        if (xServer.drawableManager.getDrawable(drawableId) == null) {
+            fence.close();
+            throw new BadDrawable(drawableId);
+        }
+        ((SyncExtension)xServer.getExtensionByName("SYNC")).addShmFence(fenceId, triggered, fence);
+    }
+
     @Override
     public void handleRequest(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         int opcode = client.getRequestData();
@@ -200,6 +217,11 @@ public class DRI3Extension extends Extension {
             case ClientOpcodes.PIXMAP_FROM_BUFFERS:
                 try (XLock lock = xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.PIXMAP_MANAGER, XServer.Lockable.DRAWABLE_MANAGER)) {
                     pixmapFromBuffers(client, inputStream, outputStream);
+                }
+                break;
+            case ClientOpcodes.FENCE_FROM_FD:
+                try (XLock lock = xServer.lock(XServer.Lockable.DRAWABLE_MANAGER)) {
+                    fenceFromFd(client, inputStream);
                 }
                 break;
             default:

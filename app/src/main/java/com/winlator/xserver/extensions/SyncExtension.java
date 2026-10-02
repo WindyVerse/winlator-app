@@ -1,5 +1,6 @@
 package com.winlator.xserver.extensions;
 
+import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 
 import com.winlator.xconnector.XInputStream;
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 public class SyncExtension extends Extension {
     private final SparseBooleanArray fences = new SparseBooleanArray();
+    private final SparseArray<ShmFence> shmFences = new SparseArray<>();
 
     private static abstract class ClientOpcodes {
         private static final byte CREATE_FENCE = 14;
@@ -42,8 +44,28 @@ public class SyncExtension extends Extension {
 
     public void setTriggered(int id) {
         synchronized (fences) {
-            if (fences.indexOfKey(id) >= 0) fences.put(id, true);
+            if (fences.indexOfKey(id) >= 0) {
+                fences.put(id, true);
+                triggerShmFence(id);
+            }
         }
+    }
+
+    /** A fence backed by the client's xshmfence (DRI3 FenceFromFD); triggering it wakes the client. */
+    public void addShmFence(int id, boolean triggered, ShmFence fence) throws XRequestError {
+        synchronized (fences) {
+            if (fences.indexOfKey(id) >= 0) {
+                fence.close();
+                throw new BadIdChoice(id);
+            }
+            fences.put(id, triggered);
+            shmFences.put(id, fence);
+        }
+    }
+
+    private void triggerShmFence(int id) {
+        ShmFence fence = shmFences.get(id);
+        if (fence != null) fence.trigger();
     }
 
     private boolean isAnyTriggered(int[] ids) throws XRequestError {
@@ -75,6 +97,7 @@ public class SyncExtension extends Extension {
             int id = inputStream.readInt();
             if (fences.indexOfKey(id) < 0) throw new BadFence(id);
             fences.put(id, true);
+            triggerShmFence(id);
         }
     }
 
@@ -95,6 +118,11 @@ public class SyncExtension extends Extension {
             int id = inputStream.readInt();
             if (fences.indexOfKey(id) < 0) throw new BadFence(id);
             fences.delete(id);
+            ShmFence shmFence = shmFences.get(id);
+            if (shmFence != null) {
+                shmFence.close();
+                shmFences.delete(id);
+            }
         }
     }
 
