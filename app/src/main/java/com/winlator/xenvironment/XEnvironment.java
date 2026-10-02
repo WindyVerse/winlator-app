@@ -10,20 +10,14 @@ import java.util.Iterator;
 
 public class XEnvironment implements Iterable<EnvironmentComponent> {
     private final Context context;
-    private final RootFS rootFS;
     private final ArrayList<EnvironmentComponent> components = new ArrayList<>();
 
-    public XEnvironment(Context context, RootFS rootFS) {
+    public XEnvironment(Context context) {
         this.context = context;
-        this.rootFS = rootFS;
     }
 
     public Context getContext() {
         return context;
-    }
-
-    public RootFS getRootFS() {
-        return rootFS;
     }
 
     public void addComponent(EnvironmentComponent environmentComponent) {
